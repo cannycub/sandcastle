@@ -1199,3 +1199,98 @@ export const claudeCode = (
     return undefined;
   },
 });
+
+// ---------------------------------------------------------------------------
+// Kiro CLI agent provider
+// ---------------------------------------------------------------------------
+
+/**
+ * Kiro headless mode (`kiro-cli chat --no-interactive`) passes the prompt as a
+ * positional argv argument — `--no-interactive` requires it and the CLI does not
+ * read the prompt from stdin. Linux enforces a per-argument limit (~128 KiB,
+ * ARG_MAX stack). Stay slightly under so users get a clear error instead of
+ * spawn E2BIG. Mirrors the Cursor/Copilot guard.
+ */
+const KIRO_PRINT_PROMPT_MAX_BYTES = 120 * 1024;
+
+function assertKiroPrintPromptFitsArgv(prompt: string): void {
+  const n = Buffer.byteLength(prompt, "utf8");
+  if (n > KIRO_PRINT_PROMPT_MAX_BYTES) {
+    throw new Error(
+      `Kiro print-mode prompt is ${n} bytes (max ${KIRO_PRINT_PROMPT_MAX_BYTES} bytes). Kiro headless accepts the prompt only as a command-line argument; shorten the prompt or split the work. Other Sandcastle providers use stdin for large prompts.`,
+    );
+  }
+}
+
+/** Matches ANSI/VT CSI control sequences (e.g. colour codes). */
+const KIRO_ANSI_ESCAPE = /\[[0-9;?]*[ -/]*[@-~]/g;
+
+/**
+ * Parse one line of Kiro headless output.
+ *
+ * Kiro `chat --no-interactive` streams plain text/markdown to stdout — there is
+ * no JSON event stream (the `-f json` flag only applies to `--list-models` /
+ * `--list-sessions`). So we strip ANSI escapes and pass each non-blank line
+ * through as a `text` event; the full stdout becomes the iteration result via
+ * the Orchestrator's `resultText || stdout` fallback. We deliberately emit no
+ * `tool_call` / `session_id` / `usage` events: Kiro's text format is
+ * undocumented (brittle to parse) and its sessions are SQLite-backed and
+ * non-resumable. See ADR 0021.
+ */
+const parseKiroStreamLine = (line: string): ParsedStreamEvent[] => {
+  const text = line.replace(KIRO_ANSI_ESCAPE, "");
+  if (!text.trim()) return [];
+  return [{ type: "text", text }];
+};
+
+/** Options for the Kiro CLI agent provider. */
+export interface KiroOptions {
+  /** Reasoning effort level. Maps to Kiro's --effort flag. */
+  readonly effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /**
+   * Kiro context profile, mapped to Kiro's own `--agent` flag. This is distinct
+   * from Sandcastle's `--agent` provider selector — it chooses a context profile
+   * *inside* Kiro.
+   */
+  readonly agent?: string;
+  /** Environment variables injected by this agent provider. */
+  readonly env?: Record<string, string>;
+}
+
+export const kiro = (model: string, options?: KiroOptions): AgentProvider => ({
+  name: "kiro",
+  env: options?.env ?? {},
+  // Kiro stores conversation state in a SQLite database (data.sqlite3), which is
+  // not resumable per ADR 0016. Non-resumable: captureSessions false, no
+  // sessionStorage, resumeSession ignored — like cursor, opencode, and copilot.
+  captureSessions: false,
+
+  buildPrintCommand({
+    prompt,
+    dangerouslySkipPermissions,
+  }: AgentCommandOptions): PrintCommand {
+    assertKiroPrintPromptFitsArgv(prompt);
+    const effortFlag = options?.effort ? ` --effort ${options.effort}` : "";
+    const agentFlag = options?.agent
+      ? ` --agent ${shellEscape(options.agent)}`
+      : "";
+    // --trust-all-tools auto-approves tool use; without it Kiro blocks on a
+    // confirmation prompt and hangs the unattended sandbox run.
+    const trustFlag = dangerouslySkipPermissions ? " --trust-all-tools" : "";
+    return {
+      command: `kiro-cli chat --no-interactive --model ${shellEscape(model)}${effortFlag}${agentFlag}${trustFlag} -- ${shellEscape(prompt)}`,
+    };
+  },
+
+  buildInteractiveArgs({ prompt }: AgentCommandOptions): string[] {
+    const args = ["kiro-cli", "chat", "--model", model];
+    if (options?.effort) args.push("--effort", options.effort);
+    if (options?.agent) args.push("--agent", options.agent);
+    if (prompt) args.push(prompt);
+    return args;
+  },
+
+  parseStreamLine(line: string): ParsedStreamEvent[] {
+    return parseKiroStreamLine(line);
+  },
+});

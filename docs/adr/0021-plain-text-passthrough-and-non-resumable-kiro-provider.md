@@ -67,7 +67,7 @@ plain-text passthrough parser, and ship Kiro as the first such provider —
   `--resume-id`. This is ADR 0016 applied, not overridden: a DB-only session
   store does not qualify for resume.
 - **Headless command.** `kiro-cli chat --no-interactive --model <m>
-  [--effort <e>] [--agent <a>] [--trust-all-tools] -- <prompt>`. The prompt is a
+[--effort <e>] [--agent <a>] [--trust-all-tools] -- <prompt>`. The prompt is a
   positional argv argument (required by `--no-interactive`); we guard it at
   120 KiB like the Cursor/Copilot providers, since Kiro headless does not accept
   the prompt on stdin. `--trust-all-tools` is appended when
@@ -75,7 +75,7 @@ plain-text passthrough parser, and ship Kiro as the first such provider —
 - **Interactive mode.** `buildInteractiveArgs` returns
   `kiro-cli chat --model <m> [--effort] [--agent] [<prompt>]` for `interactive()`.
 
-We accept that this departs from two documented must-haves *for this provider*.
+We accept that this departs from two documented must-haves _for this provider_.
 The departure is deliberate, fork-scoped, and recorded here and in the guide; it
 does not relax the requirements for other providers.
 
@@ -96,7 +96,7 @@ does not relax the requirements for other providers.
    Kiro now; the captured output shows the degraded experience is acceptable.
 4. **Plain-text passthrough, non-resumable** (chosen) — minimal, robust, and
    reuses the orchestrator's stdout fallback and ADR 0016's `captureSessions:
-   false` path with no new machinery.
+false` path with no new machinery.
 
 ## Consequences
 
@@ -106,7 +106,7 @@ does not relax the requirements for other providers.
   providers.
 - Three capabilities are intentionally absent for Kiro: structured tool-call
   rendering in the UI (Kiro's own inline text shows instead), per-iteration token
-  usage (Kiro reports *credits*, not tokens), and cross-session resume.
+  usage (Kiro reports _credits_, not tokens), and cross-session resume.
 - The provider contract is unchanged. `parseStreamLine` returning only `text`
   events is valid; no orchestrator or `Display` changes are needed.
 - [`adding-an-agent-provider.md`](../agents/adding-an-agent-provider.md) gains a
