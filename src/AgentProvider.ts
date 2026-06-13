@@ -119,17 +119,18 @@ const parseStreamJsonLine = (line: string): ParsedStreamEvent[] => {
 };
 
 /**
- * Cursor Agent CLI print mode passes the prompt as a positional argv argument; stdin is not
- * documented for delivering the prompt. Linux enforces a per-argument limit (~128 KiB, ARG_MAX
- * stack). Stay slightly under so users get a clear error instead of spawn E2BIG.
+ * Some agent CLIs (Cursor, Copilot, Kiro) accept the prompt only as an argv
+ * argument rather than on stdin. Linux enforces a per-argument limit (~128 KiB,
+ * ARG_MAX stack); stay slightly under so callers get a clear error instead of
+ * spawn E2BIG.
  */
-const CURSOR_PRINT_PROMPT_MAX_BYTES = 120 * 1024;
+const PRINT_PROMPT_MAX_BYTES = 120 * 1024;
 
-function assertCursorPrintPromptFitsArgv(prompt: string): void {
+function assertPrintPromptFitsArgv(prompt: string, providerName: string): void {
   const n = Buffer.byteLength(prompt, "utf8");
-  if (n > CURSOR_PRINT_PROMPT_MAX_BYTES) {
+  if (n > PRINT_PROMPT_MAX_BYTES) {
     throw new Error(
-      `Cursor print-mode prompt is ${n} bytes (max ${CURSOR_PRINT_PROMPT_MAX_BYTES} bytes). The Cursor CLI accepts the prompt only as a command-line argument; shorten the prompt or split the work. Other Sandcastle providers use stdin for large prompts.`,
+      `${providerName} print-mode prompt is ${n} bytes (max ${PRINT_PROMPT_MAX_BYTES} bytes). This provider passes the prompt as a command-line argument; shorten the prompt or split the work. Other Sandcastle providers use stdin for large prompts.`,
     );
   }
 }
@@ -783,7 +784,7 @@ export const cursor = (
     prompt,
     dangerouslySkipPermissions,
   }: AgentCommandOptions): PrintCommand {
-    assertCursorPrintPromptFitsArgv(prompt);
+    assertPrintPromptFitsArgv(prompt, "Cursor");
     const forceFlag = dangerouslySkipPermissions ? " --force" : "";
 
     return {
@@ -936,24 +937,6 @@ export const opencode = (
 // ---------------------------------------------------------------------------
 
 /**
- * Copilot CLI print mode passes the prompt as the `-p` argv argument. (The CLI
- * can also read a prompt piped on stdin — `echo "..." | copilot` — but we use
- * the `-p` argv form here for parity with the tested print-command path.) Linux
- * enforces a per-argument limit (~128 KiB, ARG_MAX stack). Stay slightly under
- * so users get a clear error instead of spawn E2BIG. Mirrors the Cursor guard.
- */
-const COPILOT_PRINT_PROMPT_MAX_BYTES = 120 * 1024;
-
-function assertCopilotPrintPromptFitsArgv(prompt: string): void {
-  const n = Buffer.byteLength(prompt, "utf8");
-  if (n > COPILOT_PRINT_PROMPT_MAX_BYTES) {
-    throw new Error(
-      `Copilot print-mode prompt is ${n} bytes (max ${COPILOT_PRINT_PROMPT_MAX_BYTES} bytes). This provider passes the prompt as a command-line argument; shorten the prompt or split the work. Other Sandcastle providers use stdin for large prompts.`,
-    );
-  }
-}
-
-/**
  * Parse one line of `copilot --output-format json` JSONL output.
  *
  * Schema (observed via `copilot -p ... --output-format json --model ...`):
@@ -1058,7 +1041,7 @@ export const copilot = (
     prompt,
     dangerouslySkipPermissions,
   }: AgentCommandOptions): PrintCommand {
-    assertCopilotPrintPromptFitsArgv(prompt);
+    assertPrintPromptFitsArgv(prompt, "Copilot");
     const allowAll = dangerouslySkipPermissions ? " --allow-all-tools" : "";
     const effortFlag = options?.effort ? ` --effort ${options.effort}` : "";
     return {
@@ -1204,24 +1187,6 @@ export const claudeCode = (
 // Kiro CLI agent provider
 // ---------------------------------------------------------------------------
 
-/**
- * Kiro headless mode (`kiro-cli chat --no-interactive`) passes the prompt as a
- * positional argv argument — `--no-interactive` requires it and the CLI does not
- * read the prompt from stdin. Linux enforces a per-argument limit (~128 KiB,
- * ARG_MAX stack). Stay slightly under so users get a clear error instead of
- * spawn E2BIG. Mirrors the Cursor/Copilot guard.
- */
-const KIRO_PRINT_PROMPT_MAX_BYTES = 120 * 1024;
-
-function assertKiroPrintPromptFitsArgv(prompt: string): void {
-  const n = Buffer.byteLength(prompt, "utf8");
-  if (n > KIRO_PRINT_PROMPT_MAX_BYTES) {
-    throw new Error(
-      `Kiro print-mode prompt is ${n} bytes (max ${KIRO_PRINT_PROMPT_MAX_BYTES} bytes). Kiro headless accepts the prompt only as a command-line argument; shorten the prompt or split the work. Other Sandcastle providers use stdin for large prompts.`,
-    );
-  }
-}
-
 /** Matches ANSI/VT CSI control sequences (e.g. colour codes). */
 const KIRO_ANSI_ESCAPE = /\[[0-9;?]*[ -/]*[@-~]/g;
 
@@ -1269,7 +1234,7 @@ export const kiro = (model: string, options?: KiroOptions): AgentProvider => ({
     prompt,
     dangerouslySkipPermissions,
   }: AgentCommandOptions): PrintCommand {
-    assertKiroPrintPromptFitsArgv(prompt);
+    assertPrintPromptFitsArgv(prompt, "Kiro");
     const effortFlag = options?.effort ? ` --effort ${options.effort}` : "";
     const agentFlag = options?.agent
       ? ` --agent ${shellEscape(options.agent)}`

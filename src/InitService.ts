@@ -401,7 +401,7 @@ WORKDIR /home/agent
 # installer is per-user and drops the binary in ~/.local/bin, so it runs after
 # USER and that dir must be on PATH for both this build and the agent at runtime.
 # (Kiro auto-updates in the background; harmless in a sandbox.)
-ENV PATH="/home/agent/.local/bin:\${PATH}"
+ENV PATH="/home/agent/.local/bin:$PATH"
 RUN curl -fsSL https://cli.kiro.dev/install | bash
 
 # In worktree sandbox mode, Sandcastle bind-mounts the git worktree at \${SANDBOX_REPO_DIR}
