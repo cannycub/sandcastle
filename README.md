@@ -25,6 +25,43 @@ Sandcastle is provider-agnostic — it ships with built-in providers for Docker,
   - [Vercel](https://vercel.com/) — cloud-based Firecracker microVMs via `@vercel/sandbox`
   - Or [create your own](#custom-sandbox-providers) using `createBindMountSandboxProvider` or `createIsolatedSandboxProvider`
 
+## Installing this fork (CLI)
+
+This fork adds the **Kiro CLI** agent provider (see [ADR 0021](docs/adr/0021-plain-text-passthrough-and-non-resumable-kiro-provider.md)) and is not published to npm, so install it from source. The build output (`dist/`) is not committed, so you must build before linking.
+
+1. Clone the fork and check out the branch:
+
+```bash
+git clone https://github.com/cannycub/sandcastle.git
+cd sandcastle
+git checkout feat/kiro-provider
+```
+
+2. Install dependencies and build:
+
+```bash
+npm install
+npm run build
+```
+
+3. Link the `sandcastle` CLI globally:
+
+```bash
+npm link        # or: npm install -g .
+```
+
+4. Verify — `kiro` should appear in the agent list:
+
+```bash
+sandcastle --help
+sandcastle init --agent kiro   # scaffolds .sandcastle/ with the Kiro Dockerfile + .env.example
+```
+
+Set `KIRO_API_KEY` in `.sandcastle/.env` (Kiro Pro/Pro+/Pro Max/Power subscribers), then follow the [Quick start](#quick-start) below using the global `sandcastle` command in place of `npx @ai-hero/sandcastle`.
+
+> **After changing the source**, re-run `npm run build` — the global link points at `dist/`.
+> **To uninstall**, run `npm rm -g @ai-hero/sandcastle`.
+
 ## Quick start
 
 1. Install the package:
