@@ -7,6 +7,7 @@ import {
   codex,
   copilot,
   cursor,
+  kiro,
   opencode,
   pi,
 } from "./AgentProvider.js";
@@ -2352,5 +2353,177 @@ describe("sessionStorage", () => {
       await rm(hostDir, { recursive: true, force: true });
       await rm(sandboxDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("kiro factory", () => {
+  it("returns a provider with name 'kiro'", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider.name).toBe("kiro");
+  });
+
+  it("does not expose envManifest or dockerfileTemplate", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider).not.toHaveProperty("envManifest");
+    expect(provider).not.toHaveProperty("dockerfileTemplate");
+  });
+
+  it("is non-resumable: captureSessions false and no sessionStorage", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider.captureSessions).toBe(false);
+    expect(provider.sessionStorage).toBeUndefined();
+  });
+
+  it("buildPrintCommand includes headless mode, model and prompt as argv (no stdin)", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command, stdin } = provider.buildPrintCommand(opts("do something"));
+    expect(command).toContain("kiro-cli chat --no-interactive");
+    expect(command).toContain("--model 'claude-sonnet-4.6'");
+    expect(command).toContain("-- 'do something'");
+    expect(stdin).toBeUndefined();
+  });
+
+  it("buildPrintCommand includes --trust-all-tools when permissions are skipped", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand({
+      prompt: "do something",
+      dangerouslySkipPermissions: true,
+    });
+    expect(command).toContain("--trust-all-tools");
+  });
+
+  it("buildPrintCommand omits --trust-all-tools when permissions are not skipped", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand({
+      prompt: "do something",
+      dangerouslySkipPermissions: false,
+    });
+    expect(command).not.toContain("--trust-all-tools");
+  });
+
+  it("buildPrintCommand shell-escapes the prompt", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand(opts("it's a test"));
+    expect(command).toContain("'it'\\''s a test'");
+  });
+
+  it("buildPrintCommand shell-escapes the model", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand(opts("do something"));
+    expect(command).toContain("--model 'claude-sonnet-4.6'");
+  });
+
+  it("buildPrintCommand includes --effort when specified", () => {
+    const provider = kiro("claude-sonnet-4.6", { effort: "high" });
+    const { command } = provider.buildPrintCommand(opts("do something"));
+    expect(command).toContain("--effort high");
+  });
+
+  it("buildPrintCommand omits --effort when not specified", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand(opts("do something"));
+    expect(command).not.toContain("--effort");
+  });
+
+  it("buildPrintCommand includes --agent when specified", () => {
+    const provider = kiro("claude-sonnet-4.6", { agent: "build" });
+    const { command } = provider.buildPrintCommand(opts("do something"));
+    expect(command).toContain("--agent 'build'");
+  });
+
+  it("buildPrintCommand omits --agent when not specified", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const { command } = provider.buildPrintCommand(opts("do something"));
+    expect(command).not.toContain("--agent");
+  });
+
+  it("buildPrintCommand shell-escapes the agent value", () => {
+    const provider = kiro("claude-sonnet-4.6", { agent: "it's tricky" });
+    const { command } = provider.buildPrintCommand(opts("test"));
+    expect(command).toContain("--agent 'it'\\''s tricky'");
+  });
+
+  it("buildPrintCommand rejects prompts larger than the argv-safe limit", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const huge = "x".repeat(120 * 1024 + 1);
+    expect(() => provider.buildPrintCommand(opts(huge))).toThrow(
+      /Kiro print-mode prompt/,
+    );
+  });
+
+  it("buildInteractiveArgs includes binary, chat, model and prompt", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const args = provider.buildInteractiveArgs!(opts("do something"));
+    expect(args).toEqual([
+      "kiro-cli",
+      "chat",
+      "--model",
+      "claude-sonnet-4.6",
+      "do something",
+    ]);
+  });
+
+  it("buildInteractiveArgs includes --effort and --agent when specified", () => {
+    const provider = kiro("claude-sonnet-4.6", {
+      effort: "high",
+      agent: "build",
+    });
+    const args = provider.buildInteractiveArgs!(opts("do something"));
+    expect(args).toEqual([
+      "kiro-cli",
+      "chat",
+      "--model",
+      "claude-sonnet-4.6",
+      "--effort",
+      "high",
+      "--agent",
+      "build",
+      "do something",
+    ]);
+  });
+
+  it("parseStreamLine passes through a plain text line as a text event", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider.parseStreamLine("- RESOURCES.md")).toEqual([
+      { type: "text", text: "- RESOURCES.md" },
+    ]);
+  });
+
+  it("parseStreamLine returns an empty array for blank lines", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider.parseStreamLine("")).toEqual([]);
+    expect(provider.parseStreamLine("   ")).toEqual([]);
+  });
+
+  it("parseStreamLine strips ANSI escape codes but keeps the text", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const line = "[32m ✓ Successfully read directory[0m";
+    expect(provider.parseStreamLine(line)).toEqual([
+      { type: "text", text: " ✓ Successfully read directory" },
+    ]);
+  });
+
+  it("parseStreamLine does NOT strip plain bracketed markdown text", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    expect(provider.parseStreamLine("see [RESOURCES.md] for more")).toEqual([
+      { type: "text", text: "see [RESOURCES.md] for more" },
+    ]);
+  });
+
+  it("parseStreamLine emits no session_id, tool_call, or usage events", () => {
+    const provider = kiro("claude-sonnet-4.6");
+    const events = provider.parseStreamLine(" ▸ Credits: 0.06 • Time: 6s");
+    expect(events.every((e) => e.type === "text")).toBe(true);
+  });
+
+  it("bakes the model into each provider instance independently", () => {
+    const a = kiro("claude-sonnet-4.6");
+    const b = kiro("claude-opus-4.6");
+    expect(a.buildPrintCommand(opts("x")).command).toContain(
+      "--model 'claude-sonnet-4.6'",
+    );
+    expect(b.buildPrintCommand(opts("x")).command).toContain(
+      "--model 'claude-opus-4.6'",
+    );
   });
 });

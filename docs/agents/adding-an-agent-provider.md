@@ -9,6 +9,14 @@ This document is for contributors adding support for a new **agent** (e.g. Claud
 
 For terminology (**agent**, **agent provider**, **sandbox**, etc.), see [`CONTEXT.md`](../../CONTEXT.md).
 
+> **Fork deviation (Kiro).** This fork relaxes two of the must-haves below for
+> text-only agents — see [ADR 0021](../adr/0021-plain-text-passthrough-and-non-resumable-kiro-provider.md).
+> The Kiro provider emits **plain text** (no JSON stream) and is **non-resumable**
+> (`captureSessions: false`), because Kiro headless has no structured chat output
+> and stores sessions in a SQLite database (non-resumable per [ADR 0016](../adr/0016-resume-requires-filesystem-backed-sessions.md)).
+> These relaxations apply only to such providers; the requirements below stand for
+> everything else.
+
 ## Evaluating a new agent
 
 Before implementing, confirm the agent's CLI satisfies the must-haves below. If a must-have is missing, the agent likely cannot be supported until its CLI changes.
